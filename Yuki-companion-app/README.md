@@ -1,177 +1,109 @@
-# Sesame Robot Companion App
+# Yuki Companion App
 
-AI-powered natural language interface for the Sesame robot using Google Gemini and PyTTSx3.
+A voice/text natural-language interface for the **Yuki** quadruped robot. It turns what
+you say into a personality-driven response plus a robot command, speaks the response, and
+sends the command to Yuki's ESP32 over WiFi.
 
-## Setup
+```
+You ──speech/text──▶ companion app ──LLM──▶ {command, response}
+                          │                      │
+                     speak response        HTTP GET /cmd?... ──▶ ESP32 (servos)
+```
 
-### Requirements
+## Requirements
 
-- Python 3.7+
-- Sesame robot on same network
-- Google Gemini API key from [ai.google.dev](https://aistudio.google.com/app/apikey) or self hosted LLM model
+- Python 3.8+
+- Yuki's ESP32 powered on and reachable on your network (see [the firmware](../Hardware/yuki-firmware-main_wifi/))
+- One AI backend:
+  - **Google Gemini** API key from [aistudio.google.com](https://aistudio.google.com/app/apikey), or
+  - a **local OpenAI-compatible LLM** (Ollama / LM Studio)
 
-### Installation
+## Installation
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-### Configuration
+> On Windows, `PyAudio` (needed for the microphone) sometimes needs a prebuilt wheel —
+> `pip install pipwin; pipwin install pyaudio` is the usual fallback.
 
-Option 1 - Environment variables:
+## Configuration
 
-```powershell
-$env:SESAME_LOCAL=true
-# To test without Sesame you can set SESAME_ROBOT_IP to 'mock'
-$env:SESAME_ROBOT_IP="192.168.1.100"
-$env:GEMINI_API_KEY="your_key_here"
-# Use localhost if hosted LLM is on same PC, or IP (e.g. 192.168.1.50) if on a different server
-$env:LOCAL_LLM_URL="http://localhost:11434/v1"
-$env:LOCAL_LLM_MODEL="granite4"
-```
+Copy `.env.example` to `.env` and edit it (the app loads `.env` automatically), or set the
+same names as environment variables.
 
-Option 2 - `.env` file:
-
-```
-SESAME_LOCAL=true
-SESAME_ROBOT_IP=192.168.1.100
-GEMINI_API_KEY=your_key_here
-VOICE_ENABLED=true
-TTS_ENGINE=pyttsx3
-WAKE_WORD=hey sesame
-WAKE_WORD_MODE=false
-# Use localhost if AI is on same PC, or IP (e.g. 192.168.1.50) if on a different server
-LOCAL_LLM_URL="http://localhost:11434/v1"
-LOCAL_LLM_MODEL="granite4"
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `YUKI_ROBOT_IP` | `yuki.local` | Robot IP / mDNS host, or `mock` to run without hardware |
+| `YUKI_LOCAL` | `false` | `false` = Gemini, `true` = local LLM |
+| `GEMINI_API_KEY` | – | Required when `YUKI_LOCAL=false` |
+| `LOCAL_LLM_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint |
+| `LOCAL_LLM_MODEL` | `llama3` | Local model name |
+| `VOICE_ENABLED` | `true` | Enable mic + TTS |
+| `TTS_ENGINE` | `pyttsx3` | `pyttsx3` (offline) or `gemini` (cloud) |
+| `WAKE_WORD` | `hey yuki` | Wake phrase |
+| `WAKE_WORD_MODE` | `false` | Listen for the wake word |
+| `MOVE_DURATION` | `0` | Seconds before auto-stopping locomotion (`0` = until "stop") |
+| `DEBUG` | `false` | Print raw AI interpretations |
 
 ## Usage
 
-### CLI Mode
-
 ```powershell
-python sesame_companion.py
+python yuki_companion.py
 ```
 
-### GUI Mode
+At the prompt you can type or speak naturally ("dance", "walk forward", "how are you?").
+Built-in keywords: `voice`, `wakeword`, `tts`, `status`, `help`, `quit`/`exit`.
 
-```powershell
-python sesame_gui.py
-```
+To try it with no robot attached, set `YUKI_ROBOT_IP=mock`.
 
-## Features
+## Commands
 
-### Commands
+`forward`, `backward`, `left`, `right`, `rest`, `swim`, `dance`, `wave`, `point`, `stand`,
+`cute`, `pushup`, `freaky`, `bow`, `worm`, `shake`, `shrug`, `dead`, `crab`, `stop`.
 
-- **Movement**: walk, dance, wave, swim, pushup, bow, shake, etc.
-- **Control**: idle, stop, rest
-- **Status**: Check robot state
+The AI only emits a command for a direct order; otherwise it just chats. Greetings
+auto-trigger `wave`.
 
-### Faces
+## How it talks to the robot
 
-- **Conversational**: happy, sad, angry, excited, sleepy, love, confused, surprised
-- **Action-specific**: Auto-selected during movements
+The ESP32 exposes a simple HTTP GET API (served alongside its captive-portal web UI):
 
-### Voice Control
+| Request | Effect |
+|---|---|
+| `GET /cmd?go=forward\|backward\|left\|right` | Continuous locomotion until stopped |
+| `GET /cmd?pose=<name>` | Run a one-shot pose (dance, wave, …) |
+| `GET /cmd?stop=1` | Stop |
+| `GET /cmd?motor=<1-8>&value=<0-180>` | Drive a single servo (tuning) |
+| `GET /status` | JSON: `currentCommand`, `networkConnected`, `sta`, `ap` |
+| `GET /getSettings` / `GET /setSettings?...` | Read/update frame delay, walk cycles, etc. |
 
-- Speech recognition via Google Speech API
-- TTS engines: pyttsx3 (local) or Gemini (cloud)
-- Wake word support: "hey sesame" (configurable)
-- Audio-synced talking animation
+Locomotion (`go=...`) runs continuously on the robot until a `stop`. Set `MOVE_DURATION`
+so a single "walk forward" automatically stops after N seconds.
 
-### AI Personality
+## Components
 
-- Small robot with limited intelligence
-- Randomly sarcastic/mean responses (~90%)
-- Self-aware of being artificial (~20%)
-- Short, simple responses with comedic timing
+- **`VoiceInterface`** — speech recognition (Google Speech API) and TTS (pyttsx3 or Gemini),
+  with optional wake-word listening.
+- **`YukiRobotController`** — HTTP client for the ESP32; command→URL mapping, reachability
+  check via `/status`, and a shared `requests.Session`. Supports `mock` mode.
+- **`GeminiInterface` / `LocalLLMInterface`** — turn user input into
+  `{command, response, reasoning}` JSON using Yuki's personality prompt.
+- **`YukiCompanionApp`** — orchestrates the above and runs the interactive CLI loop.
 
-## Architecture
+## Finding the robot
 
-### Components
-
-**VoiceInterface**
-
-- Speech recognition (Google Speech API)
-- TTS with pyttsx3 or Gemini
-- Audio-level based mouth animation (pyaudio)
-- Wake word detection
-
-**SesameRobotController**
-
-- HTTP API client for robot control
-- Handles face-only updates (idle command)
-- Command validation and error handling
-
-**GeminiInterface**
-
-- Natural language processing
-- Command/face extraction from user input
-- Personality and response generation
-
-**YukiCompanionApp**
-
-- Orchestrates all components
-- Interactive CLI loop
-- Command routing and execution
-
-### Face Animation System
-
-The robot has two types of faces:
-
-- **Base faces**: Emotion with mouth closed (e.g., `happy`)
-- **Talk variants**: Same emotion with mouth open (e.g., `talk_happy`)
-
-During TTS, the system switches between base and talk variants based on audio levels detected via pyaudio. Falls back to time-based animation if audio monitoring unavailable.
-
-### API Protocol
-
-**Command endpoint**: `POST /api/command`
-
-```json
-{"command": "walk"}
-{"face": "happy"}
-{"command": "wave", "face": "excited"}
-```
-
-**Status endpoint**: `GET /api/status`
-
-```json
-{
-	"currentCommand": "idle",
-	"currentFace": "happy",
-	"networkConnected": true
-}
-```
-
-## Finding Robot IP
-
-1. Connect robot via USB
-2. Open serial monitor at 115200 baud
-3. Look for: `Connected to network! IP: X.X.X.X`
+- If mDNS works on your network, just use `yuki.local`.
+- Otherwise connect Yuki via USB, open the serial monitor at **115200 baud**, and read the
+  `STA IP (internet): X.X.X.X` line.
+- Quick check: `curl http://yuki.local/status` (or `http://<ip>/status`).
 
 ## Troubleshooting
 
-**pyaudio not available**
-
-- Audio-synced animation will fall back to time-based
-- Install: `pip install pyaudio`
-- Windows: May need unofficial wheel from [here](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio)
-
-**Robot connection failed**
-
-- Verify robot is on and connected to network
-- Check IP address is correct
-- Ensure same network/subnet
-- Test with `curl http://ROBOT_IP/api/status`
-
-**TTS not working**
-
-- pyttsx3: Check system TTS engines installed
-- Gemini TTS: Requires valid API key and `pygame` package
-
-**Wake word not detecting**
-
-- Adjust microphone input level
-- Reduce ambient noise
-- Speak clearly near microphone
+- **Can't connect** — confirm same network/subnet, try the IP instead of `yuki.local`, and
+  test `curl http://<ip>/status`.
+- **Microphone errors** — ensure `PyAudio` installed (see Installation note).
+- **Gemini TTS silent** — needs a valid `GEMINI_API_KEY` and `pygame`; it falls back to
+  pyttsx3 on error.
+- **Local LLM returns non-JSON** — use an instruct model that honors JSON output; the app
+  strips markdown fences and retries without `response_format` if the backend rejects it.

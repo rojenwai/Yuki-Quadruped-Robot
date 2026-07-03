@@ -7,9 +7,7 @@
 
 #include "captive-portal.h"
 #include "movement-sequences.h"
-
-#define AP_SSID "Yuki's-Controller"
-#define AP_PASS "12345678"
+#include "secrets.h"  // WIFI_SSID / WIFI_PASS / AP_SSID / AP_PASS (gitignored)
 
 WebServer server(80);
 DNSServer dnsServer;
@@ -100,6 +98,12 @@ void handleCommandWeb(){
 
     }
 
+    else{
+
+      server.send(400,"text/plain","Bad Motor");
+
+    }
+
   }
 
   else{
@@ -108,6 +112,18 @@ void handleCommandWeb(){
 
   }
 
+}
+
+void handleStatus() {
+  bool connected = (WiFi.status() == WL_CONNECTED);
+  String json = "{";
+  json += "\"currentCommand\":\"" + currentCommand + "\",";
+  json += "\"networkConnected\":" + String(connected ? "true" : "false") + ",";
+  json += "\"sta\":\"" + WiFi.localIP().toString() + "\",";
+  json += "\"ap\":\"" + WiFi.softAPIP().toString() + "\"";
+  json += "}";
+
+  server.send(200, "application/json", json);
 }
 
 void handleGetSettings() {
@@ -144,8 +160,8 @@ void setup(){
   // WiFi.softAP(AP_SSID, AP_PASS);
   
   //start
-  const char* ssid = "iPhone";
-  const char* password = "abcdefgh";
+  const char* ssid = WIFI_SSID;
+  const char* password = WIFI_PASS;
 
   // Enable BOTH AP + STA
   WiFi.mode(WIFI_AP_STA);
@@ -157,12 +173,20 @@ void setup(){
   WiFi.begin(ssid, password);
 
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+
+  unsigned long startTime = millis();
+  const unsigned long timeout = 10000; // 10 seconds
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startTime < timeout) {
     delay(500);
     Serial.print(".");
   }
 
-  Serial.println("\nConnected!");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected!");
+  } else {
+    Serial.println("\nWiFi failed, continuing without internet");
+  }
 
   // Show both IPs
   Serial.print("STA IP (internet): ");
@@ -179,10 +203,19 @@ void setup(){
   server.on("/",handleRoot);
   server.on("/cmd",handleCommandWeb);
   server.onNotFound(handleRoot);
+  server.on("/status", handleStatus);
   server.on("/getSettings", handleGetSettings);
   server.on("/setSettings", handleSetSettings);
 
   server.begin();
+
+  // Advertise as yuki.local so the companion app can find us without an IP
+  if (MDNS.begin("yuki")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("mDNS responder started: http://yuki.local");
+  } else {
+    Serial.println("mDNS responder failed to start");
+  }
 
   // I2C
   Wire.begin(21,22);

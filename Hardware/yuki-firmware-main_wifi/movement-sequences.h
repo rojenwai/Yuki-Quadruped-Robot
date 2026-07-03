@@ -31,7 +31,7 @@ inline int servoNameToIndex(const String& servo) {
 // External globals
 extern int frameDelay;
 extern int walkCycles;
-
+extern String currentCommand;
 extern void setServoAngle(uint8_t channel, int angle);
 extern bool pressingCheck(String cmd, int ms);
 
@@ -42,7 +42,7 @@ extern bool pressingCheck(String cmd, int ms);
 
 // Pose/animation prototypes
 void runRestPose();
-void runStandPose();
+void runStandPose(int mode);
 void runWavePose();
 void runDancePose();
 void runSwimPose();
@@ -67,12 +67,23 @@ inline void runRestPose() {
   for (int i = 0; i < 8; i++) setServoAngle(i, 90); 
 }
 
-inline void runStandPose() { 
+inline void runStandPose(int mode) { 
   Serial.println(F("STAND")); 
-  setServoAngle(R1, 135); 
-  setServoAngle(R2, 45); 
-  setServoAngle(L1, 45); 
-  setServoAngle(L2, 135); 
+
+  if (mode == 0) {
+    // prep pose (slightly relaxed)
+    setServoAngle(R1, 120); 
+    setServoAngle(R2, 60); 
+    setServoAngle(L1, 60); 
+    setServoAngle(L2, 120); 
+  } else {
+    // full stand
+    setServoAngle(R1, 135); 
+    setServoAngle(R2, 45); 
+    setServoAngle(L1, 45); 
+    setServoAngle(L2, 135); 
+  }
+
   setServoAngle(R4, 0); 
   setServoAngle(R3, 180); 
   setServoAngle(L3, 0); 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import sys
 import json
 import requests
@@ -16,6 +17,13 @@ try:
     load_dotenv()
 except ImportError:
     print("[WARNING] python-dotenv not installed. .env file will be ignored.")
+
+# Verbose debug logging (set DEBUG=true in the environment to enable)
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+# Commands that map to the firmware's continuous "go" locomotion endpoint.
+# Everything else (except "stop") is sent as a one-shot "pose".
+LOCOMOTION_COMMANDS = {"forward", "backward", "left", "right"}
 
 AVAILABLE_COMMANDS = [
     "forward", "backward", "left", "right",
@@ -125,10 +133,12 @@ Output ONLY JSON:
 Commands: {', '.join(AVAILABLE_COMMANDS)}
 
 Rules:
-1. Greeting -> command="wave".
-2. If it is a command -> set command.
-3. Chat -> command=null.
-4. Responses are only text.
+- If user asks ANY action → ALWAYS set command
+- If greeting → command="wave"
+- If normal conversation → command=null
+- NEVER leave command null for action requests
+- Response must be short (max 10 words)
+- Speak simply like a small robot
 """
 
 class VoiceInterface:
@@ -147,7 +157,7 @@ class VoiceInterface:
         self.tts_lock = threading.Lock()
         
         self.engine = pyttsx3.init()
-        self.engine.setProperty('rate', 200)
+        self.engine.setProperty('rate', 160)
         self.engine.setProperty('volume', 0.9)
 
         voices = self.engine.getProperty('voices')
@@ -226,6 +236,7 @@ class VoiceInterface:
             print(f"[ERROR] TTS error: {e}")
     
     def _speak_pyttsx3(self, text: str):
+        self.engine.stop()
         self.engine.say(text)
         self.engine.runAndWait()
     
@@ -297,15 +308,29 @@ class VoiceInterface:
 class YukiRobotController:
     """Controls the Yuki robot over WiFi network"""
     
-    def __init__(self, robot_ip: str):
+    def __init__(self, robot_ip: str, timeout: int = 5):
         self.robot_ip = robot_ip
+        self.timeout = timeout
         self.is_mock = robot_ip.lower() == "mock"
         if not self.is_mock:
             self.base_url = f"http://{robot_ip}"
+            # Reuse one connection pool across requests
+            self.session = requests.Session()
         else:
             self.base_url = "mock"
+            self.session = None
             print("[INFO] Robot Controller running in MOCK mode")
-        
+
+    def _command_url(self, command: str) -> str:
+        """Translate a high-level command into the firmware's /cmd query."""
+        if command == "walk":  # alias kept for backward compatibility
+            command = "forward"
+        if command in LOCOMOTION_COMMANDS:
+            return f"{self.base_url}/cmd?go={command}"
+        if command == "stop":
+            return f"{self.base_url}/cmd?stop=1"
+        return f"{self.base_url}/cmd?pose={command}"
+
     def send_command(self, command: str) -> Dict[str, Any]:
         """Send command to ESP32 (GET based API)"""
         try:
@@ -313,28 +338,10 @@ class YukiRobotController:
                 print(f"[MOCK] {command}")
                 return {"status": "success", "mock": True}
 
-            # Map commands
-            if command in ["walk", "forward"]:
-                url = f"{self.base_url}/cmd?go=forward"
-
-            elif command == "backward":
-                url = f"{self.base_url}/cmd?go=backward"
-
-            elif command == "left":
-                url = f"{self.base_url}/cmd?go=left"
-
-            elif command == "right":
-                url = f"{self.base_url}/cmd?go=right"
-
-            elif command == "stop":
-                url = f"{self.base_url}/cmd?stop=1"
-
-            else:
-                url = f"{self.base_url}/cmd?pose={command}"
-
+            url = self._command_url(command)
             print(f"TX → {url}")
 
-            response = requests.get(url, timeout=5)
+            response = self.session.get(url, timeout=self.timeout)
 
             print(f"RX ← {response.status_code}")
 
@@ -345,11 +352,36 @@ class YukiRobotController:
 
         except requests.exceptions.RequestException as e:
             return {"error": str(e)}
-    
+
     def get_status(self) -> Dict[str, Any]:
-        """ESP32 has no status API"""
-        return {"status": "unknown"}
-    
+        """Ping the robot to confirm it is reachable.
+
+        Prefers the firmware's /status endpoint (returns JSON), and falls back
+        to /getSettings for older firmware that only serves that.
+        """
+        if self.is_mock:
+            return {"status": "online", "networkConnected": True, "mock": True}
+
+        try:
+            response = self.session.get(f"{self.base_url}/status", timeout=self.timeout)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = {}
+                data.setdefault("status", "online")
+                return data
+
+            # Older firmware: no /status, but /getSettings proves it's alive.
+            response = self.session.get(f"{self.base_url}/getSettings", timeout=self.timeout)
+            if response.status_code == 200:
+                return {"status": "online", "networkConnected": True}
+
+            return {"error": f"{response.status_code} - {response.text}"}
+
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e)}
+
     def stop(self) -> Dict[str, Any]:
         """Stop the current robot action"""
         return self.send_command("stop")
@@ -366,7 +398,6 @@ class LocalLLMInterface:
         """Interpret user input using local LLM API"""
         try:
             # Standard OpenAI-compatible chat endpoint
-            url = f"{self.base_url}/chat/completions"
             if self.base_url.endswith("/chat/completions"):
                 url = self.base_url
             else:
@@ -379,9 +410,7 @@ class LocalLLMInterface:
                     {"role": "user", "content": f"User: {user_input}\n\nRespond with JSON only:"}
                 ],
                 "temperature": 0.7,
-                "think":False,
                 "stream": False,
-                "format": "json" ,# This is the critical Ollama-specific flag
                 "response_format": {"type": "json_object"},
             }
             
@@ -394,9 +423,8 @@ class LocalLLMInterface:
                     response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
             
             if response.status_code != 200:
-                return {"response": f"Local AI Error: {response.status_code} - {response.text}"}
                 return {"response": f"Local AI Error: {response.status_code} - {response.text} (URL: {url})"}
-                
+
             result = response.json()
             content = result['choices'][0]['message']['content']
             
@@ -449,11 +477,13 @@ class GeminiInterface:
 class YukiCompanionApp:
     """Main application combining Gemini AI and robot control"""
     
-    def __init__(self, robot_ip: str,yuki_local:bool, gemini_api_key: str, voice_enabled: bool = True, 
-                 tts_engine: str = "pyttsx3", wake_word: str = "hey yuki", 
-                 wake_word_mode: bool = False):
+    def __init__(self, robot_ip: str,yuki_local:bool, gemini_api_key: str, voice_enabled: bool = True,
+                 tts_engine: str = "pyttsx3", wake_word: str = "hey yuki",
+                 wake_word_mode: bool = False, move_duration: float = 0.0):
         self.robot = YukiRobotController(robot_ip)
-        
+        # Seconds to keep walking/turning before auto-stopping (0 = run until told to stop)
+        self.move_duration = move_duration
+
         if yuki_local:
             local_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/v1")
             
@@ -476,6 +506,18 @@ class YukiCompanionApp:
     def process_input(self, user_input: str) -> tuple:
         """Process user input through AI and control robot"""
         interpretation = self.ai.interpret_command(user_input)
+        if DEBUG:
+            print("DEBUG:", interpretation)
+
+        # Fallback: if the AI returned neither a command nor a conversational
+        # response, salvage a command from the raw text. Use whole-word matching
+        # so "I under[stand]" or "I don't want to [dance]" don't false-trigger.
+        if not interpretation.get("command") and not interpretation.get("response"):
+            text = user_input.lower()
+            for cmd in AVAILABLE_COMMANDS:
+                if re.search(rf"\b{re.escape(cmd)}\b", text):
+                    interpretation["command"] = cmd
+                    break
         
         # Conversational response (face only, no command)
         if "response" in interpretation and not interpretation.get("command"):
@@ -494,9 +536,14 @@ class YukiCompanionApp:
             
             print(f"Sending command to robot...")
             result = self.robot.send_command(command)
-            
+
             if "error" in result:
                 return (f"[ERROR] Communicating with robot: {result['error']}", interpretation)
+
+            # Locomotion runs continuously in firmware; optionally auto-stop so a
+            # voice command like "walk forward" doesn't walk forever.
+            if self.move_duration > 0 and command in LOCOMOTION_COMMANDS:
+                threading.Timer(self.move_duration, self.robot.stop).start()
             
             response = f"[OK] Command sent successfully!"
             if ai_response:
@@ -511,9 +558,10 @@ class YukiCompanionApp:
     
     def run_interactive(self):
         """Run the app in interactive mode"""
+        ai_backend = "Local LLM" if isinstance(self.ai, LocalLLMInterface) else "Google Gemini AI"
         print("=" * 60)
         print("Yuki Robot Companion App")
-        print("Powered by Google Gemini AI")
+        print(f"Powered by {ai_backend}")
         print("=" * 60)
         print()
         
@@ -655,12 +703,9 @@ class YukiCompanionApp:
                 print("AI is thinking...")
                 response, interpretation = self.process_input(user_input)
                 print()
+
                 print(response)
 
-                if self.voice_mode and "response" in interpretation:
-                    self.voice.speak(interpretation["response"], async_mode=True)
-                
-                # Speak the response if voice mode is enabled
                 if self.voice_mode and "response" in interpretation:
                     self.voice.speak(interpretation["response"], async_mode=True)
                 print()
@@ -682,13 +727,19 @@ def main():
     tts_engine = os.getenv("TTS_ENGINE", "pyttsx3")
     wake_word = os.getenv("WAKE_WORD", "hey yuki")
     wake_word_mode = os.getenv("WAKE_WORD_MODE", "false").lower() == "true"
-    
+
+    try:
+        move_duration = float(os.getenv("MOVE_DURATION", "0"))
+    except ValueError:
+        print("[WARNING] MOVE_DURATION is not a number, disabling auto-stop")
+        move_duration = 0.0
+
     if not robot_ip:
         print("Yuki Robot IP not found in environment.")
-        robot_ip = input("Enter robot IP address (e.g., 192.168.1.100) or 'mock': ").strip()
+        robot_ip = input("Enter robot IP/host (default: yuki.local) or 'mock': ").strip()
         if not robot_ip:
-            print("Robot IP is required!")
-            sys.exit(1)
+            robot_ip = "yuki.local"
+            print(f"Using default: {robot_ip}")
     
     if not yuki_local and not gemini_api_key:
         print("Gemini API key not found in environment.")
@@ -701,9 +752,11 @@ def main():
     print(f"TTS Engine: {tts_engine}")
     if wake_word_mode:
         print(f"Wake Word Mode: Enabled ('{wake_word}')")
-    
-    app = YukiCompanionApp(robot_ip,yuki_local, gemini_api_key, voice_enabled, tts_engine, 
-                            wake_word, wake_word_mode)
+    if move_duration > 0:
+        print(f"Auto-stop: locomotion stops after {move_duration}s")
+
+    app = YukiCompanionApp(robot_ip,yuki_local, gemini_api_key, voice_enabled, tts_engine,
+                            wake_word, wake_word_mode, move_duration)
     app.run_interactive()
 
 
