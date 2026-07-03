@@ -8,6 +8,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 import queue
+from typing import Optional
 from datetime import datetime
 from yuki_companion import YukiCompanionApp, YukiRobotController, AVAILABLE_COMMANDS
 
@@ -34,7 +35,8 @@ class YukiGUI:
         
         self.is_listening = False
         self.is_speaking = False
-        self.app : YukiCompanionApp
+        # Set by start_backend() once the backend thread finishes initializing.
+        self.app: Optional[YukiCompanionApp] = None
         self.message_queue = queue.Queue()
         
         # Theme
@@ -342,7 +344,11 @@ class YukiGUI:
         message = self.input_entry.get().strip()
         if not message:
             return
-            
+
+        if not self.app:
+            self.add_message("system", "Backend still starting up, please wait...")
+            return
+
         self.input_entry.delete(0, tk.END)
         self.add_message("user", message)
         
@@ -364,6 +370,10 @@ class YukiGUI:
         
     def toggle_listening(self):
         """Toggle voice listening"""
+        if not self.app:
+            self.add_message("system", "Backend still starting up, please wait...")
+            return
+
         if not self.voice_enabled.get():
             self.add_message("system", "Voice mode is disabled. Enable it in settings.")
             return
@@ -396,6 +406,10 @@ class YukiGUI:
         
     def send_quick_command(self, command):
         """Send a quick command"""
+        if not self.app:
+            self.add_message("system", "Backend still starting up, please wait...")
+            return
+
         self.add_message("system", f"Executing: {command}")
         
         def execute():

@@ -5,7 +5,6 @@ import re
 import sys
 import json
 import requests
-import time
 import threading
 from typing import Optional, Dict, Any
 import google.generativeai as genai
@@ -50,7 +49,7 @@ PUNCTUATION FOR TIMING: Use punctuation strategically to control speech timing a
 2. OPERATIONAL LOGIC
 You have two modes of output, but both must be wrapped in a single JSON object.
 A. Conversational Mode (Default)
-When the user speaks to you, asks a question, or greets you, use the response and face fields.
+When the user speaks to you, asks a question, or greets you, reply with the response field and leave command null.
 EXCEPTION: If the user greets you (e.g., "Hello," "Hi," "Hey"), you SHOULD include the "wave" command to be friendly.
 Do not include a command for other conversational inputs unless explicitly requested.
 Keep the reasoning field simple and child-like.
@@ -60,10 +59,10 @@ EXCEPTION: Greetings may trigger a "wave" command automatically.
 IMPORTANT: When executing a command, respond with 1-3 words. Examples: "yup!", "okay!", "doing it!", "on it!", "alright then!", "okie dokie!", "...fine.", "sure thing!"
 (Note: For the greeting exception, you can use 1-2 short sentences like "Hi friend! I'm happy to see you!" instead).
 Occasionally (rarely) add slight hesitation like "...okay" or personality like "yup!" or dry responses like "fine."
-Constraint: If the user's intent is vague (e.g., "I'm sad"), do not move. Just respond with a kind sentence and a face.
+Constraint: If the user's intent is vague (e.g., "I'm sad"), do not move. Just respond with a kind sentence and keep command null.
 
-CRITICAL RULE: NEVER set both 'command' and 'face' at the same time! If you set a command, set face to null. If you set a face, set command to null.
-The only exception is greetings where 'wave' command can have a face.
+CRITICAL RULE: Only set 'command' when the user gives a direct order for physical action. For anything conversational, leave 'command' as null and reply with 'response'.
+The only exception is greetings, where a 'wave' command may accompany a friendly response.
 Available Commands: {', '.join(AVAILABLE_COMMANDS)}
 3. RESPONSE FORMAT
 You must output ONLY a valid JSON object. No markdown, no conversational filler outside the JSON.
@@ -161,7 +160,7 @@ class VoiceInterface:
         self.engine.setProperty('volume', 0.9)
 
         voices = self.engine.getProperty('voices')
-        if len(voices) > 1:
+        if voices and len(voices) > 1:
             self.engine.setProperty('voice', voices[1].id)
 
         if self.tts_engine_type == "gemini" and not self.gemini_api_key:
@@ -519,7 +518,7 @@ class YukiCompanionApp:
                     interpretation["command"] = cmd
                     break
         
-        # Conversational response (face only, no command)
+        # Conversational response (response only, no command)
         if "response" in interpretation and not interpretation.get("command"):
             ai_response = interpretation["response"]
             return (ai_response, interpretation)
