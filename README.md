@@ -8,11 +8,11 @@ waving, doing pushups, and more.
 
 The project has two halves:
 
-- **Firmware** (`Hardware/`) — an ESP32 drives 8 servos through a PCA9685 PWM board. It runs
+- **Firmware** (`Hardware/`) - an ESP32 drives 8 servos through a PCA9685 PWM board. It runs
   a WiFi web server that hosts a captive-portal control page and a small HTTP API
   (`/cmd?go=…`, `/cmd?pose=…`, `/cmd?stop=1`, `/status`, `/getSettings`). Movement
   choreographies live in `movement-sequences.h`.
-- **Companion app** (`Yuki-companion-app/`) — a Python voice/text interface that uses an LLM
+- **Companion app** (`Yuki-companion-app/`) - a Python voice/text interface that uses an LLM
   (Google Gemini or a local Ollama/LM Studio model) to interpret what you say into a robot
   command + spoken reply, then sends it over WiFi. See its
   [README](Yuki-companion-app/README.md).
@@ -21,16 +21,16 @@ The project has two halves:
 
 - ESP32 dev board
 - PCA9685 16-channel PWM/servo driver (I²C on pins 21/22)
-- 8 servos — two per leg across four legs
+- 8 servos - two per leg across four legs
 - Servo power supply (do **not** power servos from the ESP32)
 
 ## Firmware variants (`Hardware/`)
 
-- **`yuki-firmware-main_wifi/`** — the maintained build. `AP+STA` WiFi (its own
+- **`yuki-firmware-main_wifi/`** - the maintained build. `AP+STA` WiFi (its own
   `Yuki's-Controller` access point **and** joins your network), mDNS (`yuki.local`),
   per-servo home calibration, and `/status` + `/getSettings` endpoints.
-- **`yuki-firmware-main_remote/`** — an older access-point-only variant kept for reference.
-- **`debugging-firmware/`** — a standalone servo tester.
+- **`yuki-firmware-main_remote/`** - an older access-point-only variant kept for reference.
+- **`debugging-firmware/`** - a standalone servo tester.
 
 ### Building
 
