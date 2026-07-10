@@ -1,4 +1,4 @@
-# Yuki — AI Quadruped Robot
+# Yuki - AI Quadruped Robot
 
 <img width="960" height="708" alt="yuki" src="https://github.com/user-attachments/assets/6900968c-738c-4376-9b2d-6b81331a7623" />
 
