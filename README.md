@@ -1,5 +1,7 @@
 # Yuki — AI Quadruped Robot
 
+<img width="960" height="708" alt="yuki" src="https://github.com/user-attachments/assets/6900968c-738c-4376-9b2d-6b81331a7623" />
+
 Yuki is a small, endearing quadruped companion robot with an AI personality. Talk to it in
 plain language and it responds (with a bit of attitude) and acts — walking, dancing,
 waving, doing pushups, and more.
