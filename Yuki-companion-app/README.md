@@ -13,7 +13,7 @@ You ──speech/text──▶ companion app ──LLM──▶ {command, respon
 ## Requirements
 
 - Python 3.8+
-- Yuki's ESP32 powered on and reachable on your network (see [the firmware](../Hardware/yuki-firmware-main_wifi/))
+- Yuki's ESP32 powered on and reachable on your network (see [the firmware](../Hardware/yuki-firmware-main/))
 - One AI backend:
   - **Google Gemini** API key from [aistudio.google.com](https://aistudio.google.com/app/apikey), or
   - a **local OpenAI-compatible LLM** (Ollama / LM Studio)

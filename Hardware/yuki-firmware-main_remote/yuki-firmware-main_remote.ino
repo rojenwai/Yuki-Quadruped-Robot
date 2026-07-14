@@ -1,3 +1,37 @@
+/*
+ * Yuki - AI Quadruped Robot
+ * Copyright 2026 Rojen Wairokpam
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * ---------------------------------------------------------------------
+ * NOTICE OF MODIFICATION (Apache-2.0, section 4(b))
+ *
+ * This file is a MODIFIED derivative of firmware/sesame-firmware-main.ino from the
+ * Sesame Robot project by Dorian Todd (@dorianborian):
+ *     https://github.com/dorianborian/sesame-robot
+ * Original work Copyright Dorian Todd, licensed under Apache-2.0.
+ *
+ * Modifications by Rojen Wairokpam:
+ *   - Access-point-only variant, kept for reference (no station mode).
+ *   - Servos are driven by a PCA9685 16-channel PWM board
+ *     (Adafruit_PWMServoDriver) rather than directly from GPIO via
+ *     ESP32Servo.
+ *   - Removed the SSD1306 OLED face display and its animation state
+ *     machine; face-bitmaps.h is not carried over.
+ * ---------------------------------------------------------------------
+ */
+
 #include <Wire.h>
 #include <WiFi.h>
 #include <WebServer.h>

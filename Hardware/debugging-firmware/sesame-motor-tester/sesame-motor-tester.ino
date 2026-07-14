@@ -1,3 +1,36 @@
+/*
+ * Yuki - AI Quadruped Robot
+ * Copyright 2026 Rojen Wairokpam
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * ---------------------------------------------------------------------
+ * NOTICE OF MODIFICATION (Apache-2.0, section 4(b))
+ *
+ * This file is a MODIFIED derivative of firmware/debugging-firmware/sesame-motor-tester.ino from the
+ * Sesame Robot project by Dorian Todd (@dorianborian):
+ *     https://github.com/dorianborian/sesame-robot
+ * Original work Copyright Dorian Todd, licensed under Apache-2.0.
+ *
+ * Modifications by Rojen Wairokpam:
+ *   - Drives servos through a PCA9685 (Adafruit_PWMServoDriver) instead of
+ *     ESP32Servo direct-GPIO control, so the pin map and pulse-width
+ *     constants are replaced by PCA9685 channel + pulse mapping.
+ *   - Dropped the "stop" / detach command (the PCA9685 holds position).
+ *   - Motors are centred to 90 degrees on startup.
+ * ---------------------------------------------------------------------
+ */
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>

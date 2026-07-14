@@ -1,0 +1,19 @@
+Yuki — AI Quadruped Robot
+Copyright 2026 Rojen Wairokpam
+
+This product includes software originally developed as part of the
+Sesame Robot project:
+
+    Sesame Robot
+    https://github.com/dorianborian/sesame-robot
+    Copyright Dorian Todd (@dorianborian)
+    Licensed under the Apache License, Version 2.0
+
+The ESP32 firmware in Hardware/ is a modified derivative of the firmware
+in that project (firmware/captive-portal.h, firmware/movement-sequences.h,
+firmware/sesame-firmware-main.ino, and firmware/debugging-firmware/).
+Modified files carry notices describing the changes, and the changes are
+summarized in README.md under "Credit and modifications".
+
+The Python companion application in Yuki-companion-app/ is original work
+by Rojen Wairokpam.

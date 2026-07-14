@@ -1,3 +1,35 @@
+/*
+ * Yuki - AI Quadruped Robot
+ * Copyright 2026 Rojen Wairokpam
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * ---------------------------------------------------------------------
+ * NOTICE OF MODIFICATION (Apache-2.0, section 4(b))
+ *
+ * This file is a MODIFIED derivative of firmware/movement-sequences.h from the
+ * Sesame Robot project by Dorian Todd (@dorianborian):
+ *     https://github.com/dorianborian/sesame-robot
+ * Original work Copyright Dorian Todd, licensed under Apache-2.0.
+ *
+ * Modifications by Rojen Wairokpam:
+ *   - Remapped the ServoName channel enum to match this build's PCA9685
+ *     wiring order (upstream indexes the legs in a different order).
+ *   - Retuned pose keyframes and timings for the PCA9685 + MG90-class
+ *     servos used here. The set of pose routines follows upstream.
+ * ---------------------------------------------------------------------
+ */
+
 #pragma once
 #include <Arduino.h>
 
